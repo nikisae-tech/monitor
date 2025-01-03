@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Sales Promo</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .hidden { display: none; }
+        #reportText {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        .product-select {
+            width: 100%;
+            padding: 0.375rem 0.75rem;
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.5;
+            color: #212529;
+            background-color: #fff;
+            border: 1px solid #ced4da;
+            border-radius: 0.25rem;
+            height: 38px;
+        }
+        .danger-zone {
+            border: 1px dashed #dc3545;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .edit-qty {
+            cursor: pointer;
+            color: #0d6efd;
+            text-decoration: underline;
+        }
+        .sync-badge {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        .user-indicator {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            padding: 8px 15px;
+            border-radius: 20px;
+            background-color: #6c757d;
+            color: white;
+            font-size: 0.9em;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #lastSync {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body class="container mt-4">
+    <h2 class="mb-4">Monitor Sales Promo</h2>
+    
+    <div id="userIndicator" class="user-indicator"></div>
+    <div id="syncBadge" class="sync-badge"></div>
+    <div id="lastSync"></div>
+    
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5>Input Target</h5>
+            <div class="row">
+                <div class="col-md-5">
+                    <input type="text" id="productName" class="form-control" placeholder="Nama Barang">
+                </div>
+                <div class="col-md-5">
+                    <input type="number" id="targetSales" class="form-control" placeholder="Target">
+                </div>
+                <div class="col-md-2">
+                    <button onclick="addProduct()" class="btn btn-primary w-100">Isi Target</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5>Input Penjualan</h5>
+            <div class="row">
+                <div class="col-md-5">
+                    <select id="searchProduct" class="product-select">
+                        <option value="">Pilih Barang</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <input type="number" id="salesQty" class="form-control" placeholder="Quantity">
+                </div>
+                <div class="col-md-2">
+                    <button onclick="addSales()" class="btn btn-success w-100">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>No</th>
+                    <th>Nama Barang</th>
+                    <th>Target</th>
+                    <th>Sales H.Ini</th>
+                    <th>Total Sales</th>
+                    <th>Persentase</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="salesTable">
+            </tbody>
+            <tfoot class="table-secondary fw-bold">
+                <tr>
+                    <td colspan="2">TOTAL</td>
+                    <td id="totalTarget">0</td>
+                    <td id="totalToday">0</td>
+                    <td id="totalSales">0</td>
+                    <td id="avgPercentage">0%</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Quantity</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editProductIndex">
+                    <div class="mb-3">
+                        <label class="form-label">Quantity Baru:</label>
+                        <input type="number" id="editQty" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" onclick="saveEdit()">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button onclick="generateReport()" class="btn btn-info">Convert to Text Report</button>
+        <button onclick="copyReport()" class="btn btn-secondary ms-2">Copy Text</button>
+        <textarea id="reportText" class="hidden"></textarea>
+    </div>
+
+    <div class="danger-zone">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="text-danger mb-0">Reset Data Promo</h5>
+                <small class="text-muted">Menghapus semua data target dan penjualan</small>
+            </div>
+            <button onclick="confirmReset()" class="btn btn-outline-danger">
+                Hapus Semua Data
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const JSONBIN_CONFIG = {
+            binId: '677411ade41b4d34e46df3c2',
+            accessKey: '$2a$10$YYtDzxZUtn/p.xEEuncDSexwNvQg4z/eiWsSVPdkBTQkW1/du6kVq',
+            baseURL: 'https://api.jsonbin.io/v3/b'
+        };
+
+        let products = [];
+        let editModal;
+        let lastResetDate = localStorage.getItem('lastResetDate') || '';
+        let lastKnownVersion = '';
+        let userId = '';
+        let syncInterval;
+        let isProcessing = false;
+
+        function generateUserId() {
+            return 'user_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        function updateSyncStatus(status, type = 'info') {
+            const badge = document.getElementById('syncBadge');
+            badge.textContent = status;
+            badge.className = `sync-badge badge bg-${type}`;
+            
+            const lastSync = document.getElementById('lastSync');
+            lastSync.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+        }
+
+        async function acquireLock() {
+            try {
+                const response = await fetch(`${JSONBIN_CONFIG.baseURL}/${JSONBIN_CONFIG.binId}/latest`, {
+                    headers: { 'X-Access-Key': JSONBIN_CONFIG.accessKey }
+                });
+                const data = await response.json();
+                
+                if (data.metadata && data.metadata.locked) {
+                    const lockTime = new Date(data.metadata.lockTime);
+                    const now = new Date();
+                    if ((now - lockTime) > 30000) {
+                        return true;
+                    }
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function releaseLock() {
+            try {
+                const response = await fetch(`${JSONBIN_CONFIG.baseURL}/${JSONBIN_CONFIG.binId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Access-Key': JSONBIN_CONFIG.accessKey
+                    },
+                    body: JSON.stringify({
+                        products: products,
+                        metadata: {
+                            locked: false,
+                            lockTime: null,
+                            lastModifiedBy: userId
+                        }
+                    })
+                });
+                return response.ok;
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function loadData(showLoadingIndicator = true) {
+            if (isProcessing) return;
+            isProcessing = true;
+            
+            if (showLoadingIndicator) showLoading();
+            
+            try {
+                const response = await fetch(`${JSONBIN_CONFIG.baseURL}/${JSONBIN_CONFIG.binId}/latest`, {
+                    headers: { 'X-Access-Key': JSONBIN_CONFIG.accessKey }
+                });
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                const data = await response.json();
+                products = data.record.products || [];
+                
+                updateTable();
+                updateProductSelect();
+                updateSyncStatus('Synced', 'success');
+                
+                localStorage.setItem('products', JSON.stringify(products));
+            } catch (error) {
+                const localData = localStorage.getItem('products');
+                if (localData) {
+                    products = JSON.parse(localData);
+                    updateTable();
+                    updateProductSelect();
+                    updateSyncStatus('Using offline data', 'warning');
+                }
+            } finally {
+                isProcessing = false;
+                if (showLoadingIndicator) hideLoading();
+            }
+        }
+
+        async function saveData(retryCount = 0) {
+            if (isProcessing) return;
+            isProcessing = true;
+            showLoading();
+            
+            try {
+                const locked = await acquireLock();
+                if (!locked) {
+                    updateSyncStatus('Another user is making changes. Please wait...', 'warning');
+                    setTimeout(() => saveData(retryCount), 3000);
+                    return;
+                }
+                
+                const response = await fetch(`${JSONBIN_CONFIG.baseURL}/${JSONBIN_CONFIG.binId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Access-Key': JSONBIN_CONFIG.accessKey
+                    },
+                    body: JSON.stringify({
+                        products: products,
+                        metadata: {
+                            lastModifiedBy: userId,
+                            lastModifiedAt: new Date().toISOString()
+                        }
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                const data = await response.json();
+                lastKnownVersion = data.metadata.id;
+                localStorage.setItem('products', JSON.stringify(products));
+                updateSyncStatus('Changes saved', 'success');
+                
+                await releaseLock();
+            } catch (error) {
+                localStorage.setItem('products', JSON.stringify(products));
+                updateSyncStatus('Save failed. Retrying...', 'danger');
+                
+                if (retryCount < 3) {
+                    setTimeout(() => saveData(retryCount + 1), 3000);
+                } else {
+                    updateSyncStatus('Failed to save. Data stored locally.', 'danger');
+                }
+            } finally {
+                isProcessing = false;
+                hideLoading();
+            }
+        }
+
+        async function init() {
+            userId = localStorage.getItem('userId') || generateUserId();
+            localStorage.setItem('userId', userId);
+            
+            document.getElementById('userIndicator').textContent = `User ID: ${userId.slice(-4)}`;
+            
+            await loadData();
+            editModal = new bootstrap.Modal(document.getElementById('editModal'));
+            
+            syncInterval = setInterval(() => loadData(false), 30000);
+            
+            checkAndResetDaily();
+            setInterval(checkAndResetDaily, 60000);
+            
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    loadData();
+                }
+            });
+        }
+
+        window.addEventListener('beforeunload', async () => {
+            clearInterval(syncInterval);
+            await releaseLock();
+        });
+
+       function updateTable() {
+            const tbody = document.getElementById('salesTable');
+            tbody.innerHTML = '';
+
+            let totalTarget = 0;
+            let totalToday = 0;
+            let totalSales = 0;
+            let totalPercentage = 0;
+
+            products.forEach((product, index) => {
+                const percentage = (product.totalSales / product.target * 100).toFixed(1);
+                
+                const row = tbody.insertRow();
+                row.insertCell(0).textContent = index + 1;
+                row.insertCell(1).textContent = product.name;
+                row.insertCell(2).textContent = product.target;
+                row.insertCell(3).textContent = product.todaySales;
+                row.insertCell(4).textContent = product.totalSales;
+                row.insertCell(5).textContent = percentage + '%';
+                
+                const actionCell = row.insertCell(6);
+                actionCell.innerHTML = `<button class="btn btn-sm btn-primary" onclick="openEditModal(${index})">Edit</button>`;
+
+                totalTarget += product.target;
+                totalToday += product.todaySales;
+                totalSales += product.totalSales;
+                totalPercentage += parseFloat(percentage);
+            });
+
+            const avgPercentage = products.length ? (totalPercentage / products.length).toFixed(1) : 0;
+
+            document.getElementById('totalTarget').textContent = totalTarget;
+            document.getElementById('totalToday').textContent = totalToday;
+            document.getElementById('totalSales').textContent = totalSales;
+            document.getElementById('avgPercentage').textContent = avgPercentage + '%';
+        }
+
+        function updateProductSelect() {
+            const select = document.getElementById('searchProduct');
+            const selectedValue = select.value;
+            
+            select.innerHTML = '<option value="">Pilih Barang</option>';
+            
+            const sortedProducts = [...products].sort((a, b) => a.name.localeCompare(b.name));
+            
+            sortedProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.name;
+                option.textContent = product.name;
+                select.appendChild(option);
+            });
+            
+            if (products.some(p => p.name === selectedValue)) {
+                select.value = selectedValue;
+            }
+        }
+
+        function checkAndResetDaily() {
+            const today = new Date().toLocaleDateString();
+            if (lastResetDate !== today) {
+                resetDailySales();
+                lastResetDate = today;
+                localStorage.setItem('lastResetDate', today);
+            }
+        }
+
+        async function resetDailySales() {
+            products.forEach(product => {
+                product.todaySales = 0;
+            });
+            await saveData();
+            updateTable();
+        }
+
+        function openEditModal(index) {
+            document.getElementById('editProductIndex').value = index;
+            document.getElementById('editQty').value = products[index].todaySales;
+            editModal.show();
+        }
+
+        async function saveEdit() {
+            const index = parseInt(document.getElementById('editProductIndex').value);
+            const newQty = parseInt(document.getElementById('editQty').value);
+            
+            if (isNaN(newQty) || newQty < 0) {
+                alert('Mohon masukkan quantity yang valid');
+                return;
+            }
+
+            const oldQty = products[index].todaySales;
+            const difference = newQty - oldQty;
+            
+            products[index].todaySales = newQty;
+            products[index].totalSales += difference;
+
+            await saveData();
+            updateTable();
+            editModal.hide();
+        }
+
+        async function addProduct() {
+            const name = document.getElementById('productName').value;
+            const target = parseInt(document.getElementById('targetSales').value);
+            
+            if (!name || !target) {
+                alert('Mohon isi nama barang dan target');
+                return;
+            }
+
+            if (products.some(p => p.name === name)) {
+                alert('Produk sudah ada');
+                return;
+            }
+
+            products.push({
+                name: name,
+                target: target,
+                todaySales: 0,
+                totalSales: 0
+            });
+
+            await saveData();
+            updateTable();
+            updateProductSelect();
+            clearInputs('productName', 'targetSales');
+        }
+
+        async function addSales() {
+            const name = document.getElementById('searchProduct').value;
+            const qty = parseInt(document.getElementById('salesQty').value);
+
+            if (!name || !qty) {
+                alert('Mohon pilih barang dan isi quantity');
+                return;
+            }
+
+            const product = products.find(p => p.name === name);
+            if (!product) {
+                alert('Produk tidak ditemukan');
+                return;
+            }
+
+            product.todaySales += qty;
+            product.totalSales += qty;
+
+            await saveData();
+            updateTable();
+            clearInputs('salesQty');
+        }
+
+        async function confirmReset() {
+            const confirmation = confirm('PERHATIAN!\n\nAnda akan menghapus semua data:\n- Target Produk\n- Data Penjualan\n- Total Sales\n\nData yang sudah dihapus tidak dapat dikembalikan.\n\nYakin ingin menghapus semua data?');
+            
+            if (confirmation) {
+                products = [];
+                await saveData();
+                updateTable();
+                updateProductSelect();
+                
+                const textarea = document.getElementById('reportText');
+                textarea.value = '';
+                textarea.classList.add('hidden');
+                
+                alert('Semua data telah dihapus.');
+            }
+        }
+
+        function generateReport() {
+            const textarea = document.getElementById('reportText');
+            let report = 'Laporan Paling Murah\n\n';
+            
+            products.forEach((product, index) => {
+                const percentage = (product.totalSales / product.target * 100).toFixed(1);
+                report += `${index + 1}. ${product.name}_${product.target}_${product.todaySales}_${product.totalSales}_${percentage}%\n`;
+            });
+
+            const avgPercentage = products.length ? 
+                (products.reduce((acc, p) => acc + (p.totalSales / p.target * 100), 0) / products.length).toFixed(1) : 0;
+
+            report += `\navg persentase *${avgPercentage}%*`;
+            
+            textarea.value = report;
+            textarea.classList.remove('hidden');
+        }
+
+        function copyReport() {
+            const textarea = document.getElementById('reportText');
+            textarea.select();
+            document.execCommand('copy');
+            alert('Text copied to clipboard!');
+        }
+
+        function clearInputs(...ids) {
+            ids.forEach(id => document.getElementById(id).value = '');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
